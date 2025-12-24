@@ -5,7 +5,8 @@
   "identifier": "com.jm.overwatch",
   "build": {
     "frontendDist": "../src",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "",
+    "beforeDevCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
