@@ -27,7 +27,20 @@ pnpm tauri dev
 
 ```
 
+#### **Building the Portable Version**
 
+To generate a standalone, portable `.exe` that works without an installer:
+
+1. **Check Configuration**: Ensure your `src-tauri/tauri.conf.json` has `beforeBuildCommand` set to `""` and `distDir` set to `../`.
+2. **Build the Binary**:
+
+```bash
+pnpm tauri build
+
+```
+
+3. **Locate the File**: After completion, your portable executable will be located at:
+`src-tauri/target/release/overwatch.exe`
 
 ---
 

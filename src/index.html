@@ -232,13 +232,23 @@
 
         async function addFolder(path) {
             if(folders.has(path)) return;
+            document.getElementById('loading').classList.remove('hidden');
             try {
                 const results = await invoke('scan_directory', { path });
                 const nodeMap = new Map(Object.entries(results));
                 const rootId = Array.from(nodeMap.keys()).sort((a,b) => a.length - b.length)[0];
+                
                 folders.set(path, { name: path.split(/[\\/]/).pop() || path, nodeMap, rootId });
-                saveWorkspace(); updateSidebar(); switchFolder(path);
-            } catch (err) { console.error(err); }
+                
+                saveWorkspace();
+                updateSidebar();
+                
+                // Ensure switchFolder is called so the view renders with the correct limit
+                switchFolder(path); 
+            } catch (err) { 
+                console.error(err); 
+            }
+            document.getElementById('loading').classList.add('hidden');
         }
 
         function switchFolder(path) {
@@ -252,30 +262,62 @@
         }
 
         async function renderCurrentView() {
-            const container = document.getElementById('rootNode'); container.innerHTML = '';
-            const data = folders.get(activePath); if(!data) return;
+            const container = document.getElementById('rootNode');
+            container.innerHTML = '';
+            
+            // Safety check: only render if a folder path is active
+            const data = folders.get(activePath);
+            if (!data) return;
 
             if (viewMode === 'tree') {
+                // Standard Hierarchical Tree View
                 createNodeEl(data.rootId, container, 0, data.nodeMap);
             } else {
-                const limit = parseInt(document.getElementById('limitSelect').value);
-                const recent = await invoke('get_recent_files', { path: activePath, limit });
-                recent.forEach(node => {
-                    const row = document.createElement('div');
-                    row.className = "file-row px-4";
-                    row.innerHTML = `
-                        <div class="truncate pl-2 font-medium"><span class="${getIconClass(node)}">${node.is_dir ? '📁' : '📄'}</span> ${node.name}</div>
-                        <div class="text-right mono">${formatSize(node.size)}</div>
-                        <div class="text-right mono">${node.file_type}</div>
-                        <div class="text-right mono">${new Date(node.last_modified).toISOString().substring(0,10)}</div>
-                        <div class="text-right pr-4 font-bold text-slate-500">${getStatusDot(node.last_modified)}${timeAgo(node.last_modified)}</div>
-                        <div class="pl-4 flex items-center gap-2 overflow-hidden">
-                            <span class="truncate path-text" onclick="invoke('reveal_in_explorer', { path: '${node.id.replace(/\\/g, '\\\\')}' })">${node.id}</span>
-                            <button class="copy-btn uppercase font-bold text-slate-500 hover:text-blue-500" onclick="navigator.clipboard.writeText('${node.id.replace(/\\/g, '\\\\')}')">Copy</button>
-                        </div>
-                    `;
-                    container.appendChild(row);
-                });
+                // Recent Activity View with strictly enforced limit
+                try {
+                    // 1. Get the current limit from the dropdown
+                    const limitSelect = document.getElementById('limitSelect');
+                    const currentLimit = parseInt(limitSelect.value) || 25; 
+
+                    // 2. Call the specialized Rust command with the limit
+                    const recentItems = await invoke('get_recent_files', { 
+                        path: activePath, 
+                        limit: currentLimit 
+                    });
+
+                    // 3. Clear existing list and render only the returned subset
+                    recentItems.forEach(node => {
+                        const row = document.createElement('div');
+                        row.className = "file-row px-4";
+                        const iconClass = getIconClass(node);
+                        
+                        row.innerHTML = `
+                            <div class="truncate pl-2 font-medium">
+                                <span class="${iconClass}">${node.is_dir ? '📁' : '📄'}</span> ${node.name}
+                            </div>
+                            <div class="text-right mono">${formatSize(node.size)}</div>
+                            <div class="text-right mono">${node.file_type}</div>
+                            <div class="text-right mono">${new Date(node.last_modified).toISOString().substring(0,10)}</div>
+                            <div class="text-right pr-4 text-[10px] font-bold text-slate-500">
+                                ${getStatusDot(node.last_modified)}${timeAgo(node.last_modified)}
+                            </div>
+                            <div class="pl-4 flex items-center gap-2 overflow-hidden">
+                                <span class="truncate path-text" title="Reveal in Explorer" 
+                                      onclick="invoke('reveal_in_explorer', { path: '${node.id.replace(/\\/g, '\\\\')}' })">
+                                    ${node.id}
+                                </span>
+                                <button class="copy-btn uppercase font-bold text-slate-500 hover:text-blue-500" 
+                                        onclick="navigator.clipboard.writeText('${node.id.replace(/\\/g, '\\\\')}')">
+                                    Copy
+                                </button>
+                            </div>
+                        `;
+                        container.appendChild(row);
+                    });
+                } catch (error) {
+                    console.error("Failed to render recent view:", error);
+                    container.innerHTML = '<p class="p-4 text-red-500">Error loading recent activity.</p>';
+                }
             }
         }
 
