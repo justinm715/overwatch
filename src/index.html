@@ -3,166 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Folder Explorer Pro (Tauri)</title>
+    <title>Overwatch Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
         
         :root {
-            --col-name: 400px;
-            --col-size: 120px;
-            --col-type: 100px;
-            --col-date: 180px;
+            --col-name: 320px; 
+            --col-size: 80px; 
+            --col-type: 70px; 
+            --col-date: 140px; 
+            --col-ago: 110px;
         }
 
-        html, body { height: 100vh; margin: 0; overflow: hidden; background-color: #f1f5f9; }
+        html, body { 
+            height: 100vh; margin: 0; overflow: hidden; 
+            background-color: #f1f5f9; font-family: 'Inter', sans-serif; 
+            font-size: 13px; 
+        }
 
-        #ghost-line {
-            position: fixed; top: 0; width: 2px; height: 100%;
-            background-color: #3b82f6; display: none; z-index: 100; pointer-events: none;
+        #ghost-line { 
+            position: fixed; top: 0; width: 2px; height: 100%; 
+            background-color: #3b82f6; display: none; z-index: 100; pointer-events: none; 
         }
 
         .app-layout { display: flex; height: 100vh; width: 100vw; }
 
         /* Sidebar Styling */
-        aside {
-            width: 260px; background: #f8fafc; border-right: 1px solid #e2e8f0;
-            display: flex; flex-direction: column; padding: 1rem; flex-shrink: 0;
+        aside { 
+            width: 240px; background: #f8fafc; border-right: 1px solid #e2e8f0; 
+            display: flex; flex-direction: column; padding: 1rem; flex-shrink: 0; 
         }
+
+        .folder-item { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 6px 10px; margin-bottom: 4px; border-radius: 6px; 
+            background: white; border: 1px solid #e2e8f0; cursor: pointer; 
+            transition: all 0.1s; 
+        }
+        .folder-item.active { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 1px 2px rgba(59,130,246,0.1); }
+        
+        .remove-btn { 
+            color: #94a3b8; padding: 2px 6px; border-radius: 4px; 
+            font-size: 16px; line-height: 1; transition: all 0.2s;
+        }
+        .remove-btn:hover { background: #fee2e2; color: #ef4444; }
 
         /* Main Content Styling */
         main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: white; }
 
-        #treeHeader, .file-row {
-            display: grid; grid-template-columns: var(--col-name) var(--col-size) var(--col-type) var(--col-date);
-            width: max-content; min-width: 100%;
+        #treeHeader, .file-row { 
+            display: grid; 
+            grid-template-columns: var(--col-name) var(--col-size) var(--col-type) var(--col-date) var(--col-ago); 
+            width: max-content; min-width: 100%; 
+            font-size: 11.5px; /* Compact, consistent text */
         }
 
-        #treeHeader {
-            position: sticky; top: 0; z-index: 20; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+        #treeHeader { 
+            position: sticky; top: 0; z-index: 20; background: #f8fafc; 
+            border-bottom: 1px solid #e2e8f0; height: 32px; align-items: center; 
         }
 
-        #treeHeader > div {
-            border-right: 1px solid #e2e8f0;
-            position: relative;
-            padding-left: 0.5rem;
-            padding-right: 0.5rem;
-        }
-
-        /* Ensure the last column doesn't have a border */
-        #treeHeader > div:last-child {
-            border-right: none;
-        }
-
+        #treeHeader > div { border-right: 1px solid #e2e8f0; padding: 0 8px; position: relative; color: #64748b; }
+        
         #treeContainer { flex: 1; overflow: auto; contain: content; }
 
-        .folder-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 0.5rem;
-            background: white; border: 1px solid #e2e8f0; cursor: pointer; font-size: 0.8rem;
-        }
-        .folder-item.active { border-color: #3b82f6; background: #eff6ff; }
-        .folder-item:hover .remove-btn { opacity: 1; }
-        .remove-btn {
-            pointer-events: auto;
-            cursor: pointer;
-            z-index: 30; /* Ensure it stays above the row */
-        }
+        .resizer { position: absolute; right: -4px; top: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 30; }
+        .resizer:hover::after { content: ""; position: absolute; left: 50%; width: 2px; height: 100%; background: #3b82f6; }
 
-        .compact-text { font-size: 0.8125rem; line-height: 1.25rem; }
-        .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
-        .folder-content { display: none; margin-left: 1rem; border-left: 1px solid #e2e8f0; }
+        /* File Type Color Coding */
+        .icon-folder { color: #fbbf24; }
+        .icon-image  { color: #ec4899; }
+        .icon-code   { color: #3b82f6; }
+        .icon-pdf    { color: #ef4444; }
+        .icon-doc    { color: #8b5cf6; }
+        .icon-default{ color: #94a3b8; }
+
+        /* Visual Status Indicators */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; flex-shrink: 0; }
+        .status-fresh { background-color: #22c55e; box-shadow: 0 0 8px #22c55e; border: 1px solid #16a34a; } /* Fresh: Green Glow */
+        .status-stale { background-color: #fb923c; opacity: 0.4; } /* Stale: Faded Orange */
+        .status-neutral { background-color: #cbd5e1; }
+
+        .file-row { height: 28px; align-items: center; border-bottom: 1px solid #f8fafc; color: #334155; }
+        .file-row:hover { background-color: #f1f5f9; }
+        
+        .folder-content { display: none; border-left: 1px solid #e2e8f0; margin-left: 14px; }
         .folder-content.open { display: block; }
-        .chevron { transition: transform 0.1s; display: inline-block; width: 1.2rem; text-align: center;}
+
+        .chevron { width: 14px; font-size: 9px; color: #94a3b8; transition: transform 0.1s; display: inline-block; }
         .chevron.rotated { transform: rotate(90deg); }
-        .file-row:hover { background-color: #f8fafc; }
 
-        /* The Grip/Resizer */
-        .resizer {
-            position: absolute;
-            right: -4px; /* Center the grip over the border line */
-            top: 0;
-            width: 8px; /* Larger hit area for the mouse */
-            height: 100%;
-            cursor: col-resize;
-            z-index: 30;
-            transition: background-color 0.2s;
-        }
-
-        /* Visual indicator that appears when you hover or drag */
-        .resizer::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            width: 2px;
-            height: 100%;
-            background-color: transparent;
-            transition: background-color 0.2s;
-        }
-
-        .resizer:hover::after,
-        body.resizing-active .resizer::after {
-            background-color: #3b82f6; /* Blue line on hover/drag */
-        }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #64748b; }
+        .view-toggle button.active { background: #3b82f6; color: white; }
     </style>
 </head>
-<body class="resizing-active-false">
+<body>
     <div id="ghost-line"></div>
-
     <div class="app-layout">
         <aside>
-            <h2 class="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">Sources</h2>
-            
-            <div id="dropZoneSidebar" class="p-4 border-2 border-dashed border-slate-200 rounded-lg text-center cursor-pointer hover:border-blue-400 mb-6">
-                <p class="text-[10px] font-semibold text-slate-500">Drop folder to add</p>
-            </div>
-
-            <div id="folderList" class="flex-1 overflow-y-auto">
-                </div>
-
-            <div class="mt-auto pt-4 border-t text-[10px] text-slate-400">
-                Rust Backend v2.1 • Multi-Source
-            </div>
+            <h2 class="text-[10px] font-bold uppercase text-slate-400 mb-4 tracking-widest">Sources</h2>
+            <div id="dropZone" class="p-3 border-2 border-dashed border-slate-200 rounded-lg text-center cursor-pointer hover:border-blue-400 mb-4 text-[9px] font-bold text-slate-400">DROP FOLDER HERE</div>
+            <div id="folderList" class="flex-1 overflow-y-auto"></div>
         </aside>
 
         <main>
-            <header class="p-4 border-b flex justify-between items-center bg-white">
-                <h1 id="currentFolderName" class="text-sm font-semibold text-slate-700">No folder selected</h1>
-                <div id="controls" class="hidden flex items-center gap-2">
-                    <button onclick="expandAll()" class="px-3 py-1 text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 rounded">Expand All</button>
-                    <button onclick="collapseAll()" class="px-3 py-1 text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 rounded">Collapse</button>
+            <header class="px-4 py-2 border-b flex justify-between items-center bg-white">
+                <div class="flex items-center gap-3">
+                    <h1 id="currentFolderName" class="text-xs font-bold text-slate-700">No source selected</h1>
+                    <span id="viewModeLabel" class="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold uppercase">Recent Activity</span>
+                </div>
+                
+                <div id="toolbar" class="hidden flex items-center gap-3">
+                    <div class="view-toggle flex bg-slate-100 p-0.5 rounded-md">
+                        <button id="btnTree" onclick="setViewMode('tree')" class="px-2 py-0.5 text-[9px] font-bold uppercase rounded transition-all">Tree</button>
+                        <button id="btnRecent" onclick="setViewMode('recent')" class="px-2 py-0.5 text-[9px] font-bold uppercase rounded transition-all">Recent</button>
+                    </div>
+                    
+                    <div id="recentControls" class="flex items-center gap-2">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase">Limit:</span>
+                        <select id="limitSelect" onchange="renderCurrentView()" class="bg-slate-50 text-[9px] font-bold p-1 border rounded outline-none">
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+
+                    <div id="treeControls" class="hidden flex gap-1">
+                        <button onclick="expandAll()" class="text-[9px] font-bold uppercase px-2 py-1 hover:bg-slate-50 border rounded">Expand All</button>
+                    </div>
                 </div>
             </header>
 
-            <div id="treeHeader" class="hidden px-0 py-2 text-[10px] uppercase font-bold text-slate-400 border-y bg-slate-50">
-                <div class="relative">
-                    Name 
-                    <div class="resizer" data-col="name"></div>
-                </div>
-                <div class="relative text-right">
-                    Size 
-                    <div class="resizer" data-col="size"></div>
-                </div>
-                <div class="relative text-right">
-                    Type 
-                    <div class="resizer" data-col="type"></div>
-                </div>
-                <div class="relative text-right">
-                    Modified
-                    </div>
+            <div id="treeHeader" class="hidden uppercase font-bold text-slate-400 bg-slate-50">
+                <div class="relative">Name <div class="resizer" data-col="name"></div></div>
+                <div class="relative text-right">Size <div class="resizer" data-col="size"></div></div>
+                <div class="relative text-right">Type <div class="resizer" data-col="type"></div></div>
+                <div class="relative text-right">Modified <div class="resizer" data-col="date"></div></div>
+                <div class="relative text-right pr-4">Updated</div>
             </div>
 
-            <div id="treeContainer" class="hidden compact-text">
-                <div id="rootNode"></div>
-            </div>
-
-            <div id="loading" class="hidden m-auto text-center">
-                <p class="animate-pulse font-mono text-blue-500 text-xs">SCANNING...</p>
-            </div>
-
-            <div id="emptyState" class="m-auto text-center text-slate-400">
-                <p class="text-sm">Select or drop a folder to view contents</p>
-            </div>
+            <div id="treeContainer" class="hidden"><div id="rootNode"></div></div>
+            <div id="loading" class="hidden m-auto font-mono text-blue-500 text-[10px] animate-pulse uppercase">Scanning directory...</div>
+            <div id="emptyState" class="m-auto text-slate-400 text-[10px] uppercase font-medium">Ready for Source</div>
         </main>
     </div>
 
@@ -170,193 +153,191 @@
         const { invoke } = window.__TAURI__.core;
         const { listen } = window.__TAURI__.event;
         
-        // Multi-folder state
-        let folders = new Map(); // path -> { name, nodeMap, rootId }
+        let folders = new Map(); 
         let activePath = null;
+        let viewMode = 'recent'; // START AS RECENT
+
+        // Set UI on load
+        window.addEventListener('DOMContentLoaded', () => setViewMode(viewMode));
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btnTree').classList.toggle('active', mode === 'tree');
+            document.getElementById('btnRecent').classList.toggle('active', mode === 'recent');
+            document.getElementById('recentControls').classList.toggle('hidden', mode !== 'recent');
+            document.getElementById('treeControls').classList.toggle('hidden', mode !== 'tree');
+            document.getElementById('viewModeLabel').textContent = mode === 'tree' ? 'Tree View' : 'Recent Activity';
+            renderCurrentView();
+        }
+
+        function getIconClass(node) {
+            if (node.is_dir) return 'icon-folder';
+            const ext = node.file_type.toLowerCase();
+            if (['png', 'jpg', 'jpeg', 'svg', 'ai', 'gif'].includes(ext)) return 'icon-image';
+            if (['js', 'rs', 'html', 'css', 'json', 'ts'].includes(ext)) return 'icon-code';
+            if (['pdf'].includes(ext)) return 'icon-pdf';
+            if (['txt', 'md', 'doc', 'docx', 'epub'].includes(ext)) return 'icon-doc';
+            return 'icon-default';
+        }
+
+        function getStatusDot(ts) {
+            const oneMonth = 30 * 24 * 60 * 60 * 1000;
+            const diff = Date.now() - ts;
+            if (diff < 60 * 60 * 1000) return `<span class="status-dot status-fresh"></span>`; 
+            if (diff > oneMonth) return `<span class="status-dot status-stale"></span>`; 
+            return `<span class="status-dot status-neutral"></span>`;
+        }
+
+        function timeAgo(ts) {
+            const diff = Date.now() - ts;
+            const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+            if (m < 1) return 'Just now'; if (m < 60) return `${m}m ago`;
+            if (h < 24) return `${h}h ago`; return `${d}d ago`;
+        }
 
         // --- RESIZE LOGIC ---
-        let activeResizer = null;
-        let startX = 0, startWidth = 0;
-        const ghostLine = document.getElementById('ghost-line');
-
-        document.querySelectorAll('.resizer').forEach(resizer => {
-            resizer.addEventListener('mousedown', e => {
-                activeResizer = resizer;
-                startX = e.pageX;
-                startWidth = resizer.parentElement.offsetWidth;
-                ghostLine.style.left = `${e.pageX}px`;
-                ghostLine.style.display = 'block';
+        let activeResizer = null, startX, startWidth;
+        document.querySelectorAll('.resizer').forEach(r => {
+            r.addEventListener('mousedown', e => {
+                activeResizer = r; startX = e.pageX; startWidth = r.parentElement.offsetWidth;
+                document.getElementById('ghost-line').style.display = 'block';
                 document.body.classList.add('resizing-active');
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
             });
         });
-
-        function onMove(e) { if (activeResizer) ghostLine.style.left = `${e.pageX}px`; }
+        function onMove(e) { if(activeResizer) document.getElementById('ghost-line').style.left = e.pageX + 'px'; }
         function onUp(e) {
-            if (!activeResizer) return;
-            const diff = e.pageX - startX;
-            const finalWidth = Math.max(80, startWidth + diff);
-            
-            // This updates --col-name, --col-size, or --col-type dynamically
-            document.documentElement.style.setProperty(`--col-${activeResizer.dataset.col}`, `${finalWidth}px`);
-            
-            ghostLine.style.display = 'none';
+            if(!activeResizer) return;
+            document.documentElement.style.setProperty(`--col-${activeResizer.dataset.col}`, Math.max(40, startWidth + (e.pageX - startX)) + 'px');
+            document.getElementById('ghost-line').style.display = 'none';
             document.body.classList.remove('resizing-active');
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
             activeResizer = null;
         }
 
-        // --- FOLDER MANAGEMENT ---
-        listen('tauri://drag-drop', (event) => {
-            const paths = event.payload.paths;
-            if (paths && paths.length > 0) addFolder(paths[0]);
-        });
+        // --- TAURI & DATA ---
+        listen('tauri://drag-drop', e => { if(e.payload.paths.length) addFolder(e.payload.paths[0]); });
 
         async function addFolder(path) {
-            if (folders.has(path)) return;
-            
+            if(folders.has(path)) return;
             document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('emptyState').classList.add('hidden');
-
             try {
                 const results = await invoke('scan_directory', { path });
                 const nodeMap = new Map(Object.entries(results));
                 const rootId = Array.from(nodeMap.keys()).sort((a,b) => a.length - b.length)[0];
-                const folderName = path.split(/[\\/]/).pop() || path;
-
-                folders.set(path, { name: folderName, nodeMap, rootId });
-                updateSidebar();
-                switchFolder(path);
-            } catch (e) { alert(e); }
+                folders.set(path, { name: path.split(/[\\/]/).pop() || path, nodeMap, rootId });
+                updateSidebar(); switchFolder(path);
+            } catch (err) { alert(err); }
             document.getElementById('loading').classList.add('hidden');
         }
 
+        function switchFolder(path) {
+            activePath = path;
+            document.getElementById('toolbar').classList.remove('hidden');
+            document.getElementById('treeHeader').classList.remove('hidden');
+            document.getElementById('treeContainer').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('currentFolderName').textContent = folders.get(path).name;
+            renderCurrentView(); updateSidebar();
+        }
+
+        async function renderCurrentView() {
+            const container = document.getElementById('rootNode'); container.innerHTML = '';
+            const data = folders.get(activePath); if(!data) return;
+
+            if (viewMode === 'tree') {
+                createNodeEl(data.rootId, container, 0, data.nodeMap);
+            } else {
+                const limit = parseInt(document.getElementById('limitSelect').value);
+                const recent = await invoke('get_recent_files', { path: activePath, limit });
+                recent.forEach(node => {
+                    const row = document.createElement('div');
+                    row.className = "file-row px-4";
+                    const iconClass = getIconClass(node);
+                    row.innerHTML = `
+                        <div class="truncate pl-2 font-medium"><span class="${iconClass}">${node.is_dir ? '📁' : '📄'}</span> ${node.name}</div>
+                        <div class="text-right mono">${formatSize(node.size)}</div>
+                        <div class="text-right mono">${node.file_type}</div>
+                        <div class="text-right mono">${new Date(node.last_modified).toISOString().substring(0,10)}</div>
+                        <div class="text-right pr-4 text-[10px] font-bold text-slate-500">${getStatusDot(node.last_modified)}${timeAgo(node.last_modified)}</div>
+                    `;
+                    container.appendChild(row);
+                });
+            }
+        }
+
+        function createNodeEl(id, container, depth, nodeMap) {
+            const node = nodeMap.get(id); if (!node) return;
+            const row = document.createElement('div'); row.className = "file-row px-4";
+            const iconClass = getIconClass(node);
+            const name = document.createElement('div');
+            name.className = "flex items-center gap-1 truncate";
+            name.style.paddingLeft = `${depth * 0.8}rem`;
+            const chevron = node.is_dir ? `<span class="chevron">▶</span>` : `<span class="w-[14px]"></span>`;
+            name.innerHTML = `${chevron} <span class="${iconClass}">${node.is_dir ? '📁' : '📄'}</span> <span class="truncate font-medium">${node.name}</span>`;
+            
+            row.append(name);
+            row.insertAdjacentHTML('beforeend', `<div class="text-right mono">${formatSize(node.size)}</div><div class="text-right mono">${node.file_type}</div><div class="text-right mono">${new Date(node.last_modified).toISOString().substring(0,10)}</div><div class="text-right pr-4 text-[10px] font-bold text-slate-500">${getStatusDot(node.last_modified)}${timeAgo(node.last_modified)}</div>`);
+            
+            container.appendChild(row);
+            if (node.is_dir) {
+                const content = document.createElement('div'); content.className = "folder-content";
+                container.appendChild(content);
+                row.onclick = () => {
+                    const open = content.classList.toggle('open');
+                    row.querySelector('.chevron')?.classList.toggle('rotated', open);
+                    if (open && !content.innerHTML) node.children.forEach(c => createNodeEl(c, content, depth + 1, nodeMap));
+                };
+            }
+        }
+
+        // --- SIDEBAR FIX ---
         function updateSidebar() {
             const list = document.getElementById('folderList');
             list.innerHTML = '';
             
             folders.forEach((data, path) => {
-                const div = document.createElement('div');
-                // We use a data attribute to keep the path handy
-                div.dataset.path = path;
-                div.className = `folder-item ${path === activePath ? 'active' : ''} group flex items-center justify-between p-2 mb-1 rounded-md cursor-pointer hover:bg-slate-200 transition-colors`;
+                const item = document.createElement('div');
+                item.className = `folder-item ${path === activePath ? 'active' : ''}`;
                 
-                // Split the click: Name triggers switch, Button triggers remove
-                div.innerHTML = `
-                    <span class="truncate flex-1">📁 ${data.name}</span>
-                    <button 
-                        type="button"
-                        class="remove-btn px-2 text-slate-400 hover:text-red-500 font-bold ml-2"
-                        aria-label="Remove folder"
-                    >×</button>
-                `;
-
-                // Handle folder switching
-                div.addEventListener('click', (e) => {
-                    // Only switch if we didn't click the remove button
-                    if (!e.target.classList.contains('remove-btn')) {
-                        switchFolder(path);
-                    }
-                });
-
-                // Handle folder removal
-                const btn = div.querySelector('.remove-btn');
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // Stop the 'switchFolder' from firing
+                const label = document.createElement('span');
+                label.className = "truncate text-[11px] font-medium flex-1";
+                label.innerHTML = `📁 ${data.name}`;
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.className = "remove-btn hover:bg-red-100 hover:text-red-500 px-2 rounded ml-2";
+                closeBtn.innerHTML = '×';
+                
+                // Click on row selects the folder
+                item.onclick = () => switchFolder(path);
+                
+                // Click on X explicitly stops propagation and removes
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation(); //
                     removeFolder(path);
-                });
+                };
 
-                list.appendChild(div);
+                item.appendChild(label);
+                item.appendChild(closeBtn);
+                list.appendChild(item);
             });
         }
 
         function removeFolder(path) {
-            // 1. Remove from the state Map
             folders.delete(path);
-            
-            // 2. If the folder we deleted was the one we were looking at, clear the main pane
             if (activePath === path) {
                 activePath = null;
-                const rootNode = document.getElementById('rootNode');
-                if (rootNode) rootNode.innerHTML = '';
-                
-                document.getElementById('treeContainer').classList.add('hidden');
+                document.getElementById('toolbar').classList.add('hidden');
                 document.getElementById('treeHeader').classList.add('hidden');
-                document.getElementById('controls').classList.add('hidden');
+                document.getElementById('treeContainer').classList.add('hidden');
                 document.getElementById('emptyState').classList.remove('hidden');
-                document.getElementById('currentFolderName').textContent = 'No folder selected';
+                document.getElementById('rootNode').innerHTML = '';
             }
-            
-            // 3. Force the sidebar to redraw
             updateSidebar();
         }
 
-        function switchFolder(path) {
-            activePath = path;
-            const data = folders.get(path);
-            document.getElementById('currentFolderName').textContent = data.name;
-            document.getElementById('treeContainer').classList.remove('hidden');
-            document.getElementById('treeHeader').classList.remove('hidden');
-            document.getElementById('controls').classList.remove('hidden');
-            document.getElementById('emptyState').classList.add('hidden');
-            
-            const rootNode = document.getElementById('rootNode');
-            rootNode.innerHTML = '';
-            createNodeEl(data.rootId, rootNode, 0, data.nodeMap);
-            updateSidebar();
-        }
-
-        function createNodeEl(id, container, depth, nodeMap) {
-            const node = nodeMap.get(id);
-            if (!node) return;
-
-            const row = document.createElement('div');
-            row.className = `file-row py-1 px-4`;
-            
-            const name = document.createElement('div');
-            name.className = "flex items-center gap-2 truncate";
-            name.style.paddingLeft = `${depth * 1}rem`;
-            
-            const chevron = node.is_dir ? `<span class="chevron">▶</span>` : `<span class="w-4"></span>`;
-            name.innerHTML = `${chevron} ${node.is_dir ? '📁' : '📄'} <span class="truncate">${node.name}</span>`;
-
-            const size = document.createElement('div'); size.className="text-right mono text-slate-400 pr-2"; size.textContent = formatSize(node.size);
-            const type = document.createElement('div'); type.className="text-right mono text-slate-400 truncate"; type.textContent = node.file_type;
-            const date = document.createElement('div'); date.className="text-right mono text-slate-400 pr-4"; date.textContent = formatDate(node.last_modified);
-
-            row.append(name, size, type, date);
-            container.append(row);
-
-            if (node.is_dir) {
-                const content = document.createElement('div');
-                content.className = "folder-content";
-                container.append(content);
-                row.onclick = () => {
-                    const isOpen = content.classList.toggle('open');
-                    row.querySelector('.chevron')?.classList.toggle('rotated', isOpen);
-                    if (isOpen && !content.innerHTML) {
-                        node.children.forEach(cid => createNodeEl(cid, content, depth + 1, nodeMap));
-                    }
-                };
-            }
-        }
-
-        function expandAll() {
-            const closed = Array.from(document.querySelectorAll('.file-row')).filter(r => r.nextElementSibling?.classList.contains('folder-content') && !r.nextElementSibling.classList.contains('open'));
-            if (closed.length === 0) return;
-            closed.forEach(r => r.click());
-            requestAnimationFrame(expandAll);
-        }
-
-        function collapseAll() {
-            document.querySelectorAll('.folder-content').forEach(c => c.classList.remove('open'));
-            document.querySelectorAll('.chevron').forEach(ch => ch.classList.remove('rotated'));
-        }
-
-        function formatSize(b) { if(b===0) return '0 B'; const k=1024, s=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(1)) + ' ' + s[i]; }
-        function formatDate(ts) { return new Date(ts).toISOString().replace('T',' ').substring(0,16); }
+        function expandAll() { const closed = Array.from(document.querySelectorAll('.file-row')).filter(r => r.nextElementSibling?.classList.contains('folder-content') && !r.nextElementSibling.classList.contains('open')); if(!closed.length) return; closed.forEach(r => r.click()); requestAnimationFrame(expandAll); }
+        function formatSize(b) { if(!b) return '0 B'; const k=1024, s=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(1)) + ' ' + s[i]; }
     </script>
 </body>
 </html>
