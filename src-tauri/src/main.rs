@@ -1,9 +1,9 @@
-// Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::fs;
+use std::process::Command; // Required for explorer
 use std::time::UNIX_EPOCH;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -31,15 +31,24 @@ fn get_recent_files(path: String, limit: usize) -> Result<Vec<FileNode>, String>
     let mut map = HashMap::new();
     let root_path = std::path::Path::new(&path);
     if !root_path.exists() { return Err("Path not found".into()); }
-    
-    // We scan to get all nested files
     scan_recursive(root_path, &mut map)?;
-    
     let mut all_nodes: Vec<FileNode> = map.into_values().collect();
-    // Sort newest first
     all_nodes.sort_by(|a, b| b.last_modified.cmp(&a.last_modified));
-    
     Ok(all_nodes.into_iter().take(limit).collect())
+}
+
+#[tauri::command]
+fn reveal_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .args(["/select,", &path]) // Highlight the specific item
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    { Err("Unsupported OS".into()) }
 }
 
 fn scan_recursive(path: &std::path::Path, map: &mut HashMap<String, FileNode>) -> Result<(), String> {
@@ -65,8 +74,7 @@ fn scan_recursive(path: &std::path::Path, map: &mut HashMap<String, FileNode>) -
         file_type: if path.is_dir() { "Folder".into() } else { 
             path.extension().map(|e| e.to_string_lossy().to_uppercase()).unwrap_or("FILE".into()) 
         },
-        last_modified: metadata.modified().unwrap_or(UNIX_EPOCH)
-            .duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
+        last_modified: metadata.modified().unwrap_or(UNIX_EPOCH).duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
         children,
     });
     Ok(())
@@ -74,7 +82,7 @@ fn scan_recursive(path: &std::path::Path, map: &mut HashMap<String, FileNode>) -
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![scan_directory, get_recent_files])
+        .invoke_handler(tauri::generate_handler![scan_directory, get_recent_files, reveal_in_explorer])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
