@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Folder Explorer Pro (Tauri)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        
+        :root {
+            --col-name: 400px;
+            --col-size: 120px;
+            --col-type: 100px;
+            --col-date: 180px;
+        }
+
+        html, body { height: 100vh; margin: 0; overflow: hidden; background-color: #f1f5f9; }
+
+        #ghost-line {
+            position: fixed; top: 0; width: 2px; height: 100%;
+            background-color: #3b82f6; display: none; z-index: 100; pointer-events: none;
+        }
+
+        .app-layout { display: flex; height: 100vh; width: 100vw; }
+
+        /* Sidebar Styling */
+        aside {
+            width: 260px; background: #f8fafc; border-right: 1px solid #e2e8f0;
+            display: flex; flex-direction: column; padding: 1rem; flex-shrink: 0;
+        }
+
+        /* Main Content Styling */
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: white; }
+
+        #treeHeader, .file-row {
+            display: grid; grid-template-columns: var(--col-name) var(--col-size) var(--col-type) var(--col-date);
+            width: max-content; min-width: 100%;
+        }
+
+        #treeHeader {
+            position: sticky; top: 0; z-index: 20; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+        }
+
+        #treeHeader > div {
+            border-right: 1px solid #e2e8f0;
+            position: relative;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+
+        /* Ensure the last column doesn't have a border */
+        #treeHeader > div:last-child {
+            border-right: none;
+        }
+
+        #treeContainer { flex: 1; overflow: auto; contain: content; }
+
+        .folder-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 0.5rem;
+            background: white; border: 1px solid #e2e8f0; cursor: pointer; font-size: 0.8rem;
+        }
+        .folder-item.active { border-color: #3b82f6; background: #eff6ff; }
+        .folder-item:hover .remove-btn { opacity: 1; }
+        .remove-btn {
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 30; /* Ensure it stays above the row */
+        }
+
+        .compact-text { font-size: 0.8125rem; line-height: 1.25rem; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+        .folder-content { display: none; margin-left: 1rem; border-left: 1px solid #e2e8f0; }
+        .folder-content.open { display: block; }
+        .chevron { transition: transform 0.1s; display: inline-block; width: 1.2rem; text-align: center;}
+        .chevron.rotated { transform: rotate(90deg); }
+        .file-row:hover { background-color: #f8fafc; }
+
+        /* The Grip/Resizer */
+        .resizer {
+            position: absolute;
+            right: -4px; /* Center the grip over the border line */
+            top: 0;
+            width: 8px; /* Larger hit area for the mouse */
+            height: 100%;
+            cursor: col-resize;
+            z-index: 30;
+            transition: background-color 0.2s;
+        }
+
+        /* Visual indicator that appears when you hover or drag */
+        .resizer::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background-color: transparent;
+            transition: background-color 0.2s;
+        }
+
+        .resizer:hover::after,
+        body.resizing-active .resizer::after {
+            background-color: #3b82f6; /* Blue line on hover/drag */
+        }
+    </style>
+</head>
+<body class="resizing-active-false">
+    <div id="ghost-line"></div>
+
+    <div class="app-layout">
+        <aside>
+            <h2 class="text-xs font-bold uppercase text-slate-400 mb-4 tracking-widest">Sources</h2>
+            
+            <div id="dropZoneSidebar" class="p-4 border-2 border-dashed border-slate-200 rounded-lg text-center cursor-pointer hover:border-blue-400 mb-6">
+                <p class="text-[10px] font-semibold text-slate-500">Drop folder to add</p>
+            </div>
+
+            <div id="folderList" class="flex-1 overflow-y-auto">
+                </div>
+
+            <div class="mt-auto pt-4 border-t text-[10px] text-slate-400">
+                Rust Backend v2.1 • Multi-Source
+            </div>
+        </aside>
+
+        <main>
+            <header class="p-4 border-b flex justify-between items-center bg-white">
+                <h1 id="currentFolderName" class="text-sm font-semibold text-slate-700">No folder selected</h1>
+                <div id="controls" class="hidden flex items-center gap-2">
+                    <button onclick="expandAll()" class="px-3 py-1 text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 rounded">Expand All</button>
+                    <button onclick="collapseAll()" class="px-3 py-1 text-[10px] font-bold uppercase bg-slate-100 hover:bg-slate-200 rounded">Collapse</button>
+                </div>
+            </header>
+
+            <div id="treeHeader" class="hidden px-0 py-2 text-[10px] uppercase font-bold text-slate-400 border-y bg-slate-50">
+                <div class="relative">
+                    Name 
+                    <div class="resizer" data-col="name"></div>
+                </div>
+                <div class="relative text-right">
+                    Size 
+                    <div class="resizer" data-col="size"></div>
+                </div>
+                <div class="relative text-right">
+                    Type 
+                    <div class="resizer" data-col="type"></div>
+                </div>
+                <div class="relative text-right">
+                    Modified
+                    </div>
+            </div>
+
+            <div id="treeContainer" class="hidden compact-text">
+                <div id="rootNode"></div>
+            </div>
+
+            <div id="loading" class="hidden m-auto text-center">
+                <p class="animate-pulse font-mono text-blue-500 text-xs">SCANNING...</p>
+            </div>
+
+            <div id="emptyState" class="m-auto text-center text-slate-400">
+                <p class="text-sm">Select or drop a folder to view contents</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const { invoke } = window.__TAURI__.core;
+        const { listen } = window.__TAURI__.event;
+        
+        // Multi-folder state
+        let folders = new Map(); // path -> { name, nodeMap, rootId }
+        let activePath = null;
+
+        // --- RESIZE LOGIC ---
+        let activeResizer = null;
+        let startX = 0, startWidth = 0;
+        const ghostLine = document.getElementById('ghost-line');
+
+        document.querySelectorAll('.resizer').forEach(resizer => {
+            resizer.addEventListener('mousedown', e => {
+                activeResizer = resizer;
+                startX = e.pageX;
+                startWidth = resizer.parentElement.offsetWidth;
+                ghostLine.style.left = `${e.pageX}px`;
+                ghostLine.style.display = 'block';
+                document.body.classList.add('resizing-active');
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        });
+
+        function onMove(e) { if (activeResizer) ghostLine.style.left = `${e.pageX}px`; }
+        function onUp(e) {
+            if (!activeResizer) return;
+            const diff = e.pageX - startX;
+            const finalWidth = Math.max(80, startWidth + diff);
+            
+            // This updates --col-name, --col-size, or --col-type dynamically
+            document.documentElement.style.setProperty(`--col-${activeResizer.dataset.col}`, `${finalWidth}px`);
+            
+            ghostLine.style.display = 'none';
+            document.body.classList.remove('resizing-active');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            activeResizer = null;
+        }
+
+        // --- FOLDER MANAGEMENT ---
+        listen('tauri://drag-drop', (event) => {
+            const paths = event.payload.paths;
+            if (paths && paths.length > 0) addFolder(paths[0]);
+        });
+
+        async function addFolder(path) {
+            if (folders.has(path)) return;
+            
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+
+            try {
+                const results = await invoke('scan_directory', { path });
+                const nodeMap = new Map(Object.entries(results));
+                const rootId = Array.from(nodeMap.keys()).sort((a,b) => a.length - b.length)[0];
+                const folderName = path.split(/[\\/]/).pop() || path;
+
+                folders.set(path, { name: folderName, nodeMap, rootId });
+                updateSidebar();
+                switchFolder(path);
+            } catch (e) { alert(e); }
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function updateSidebar() {
+            const list = document.getElementById('folderList');
+            list.innerHTML = '';
+            
+            folders.forEach((data, path) => {
+                const div = document.createElement('div');
+                // We use a data attribute to keep the path handy
+                div.dataset.path = path;
+                div.className = `folder-item ${path === activePath ? 'active' : ''} group flex items-center justify-between p-2 mb-1 rounded-md cursor-pointer hover:bg-slate-200 transition-colors`;
+                
+                // Split the click: Name triggers switch, Button triggers remove
+                div.innerHTML = `
+                    <span class="truncate flex-1">📁 ${data.name}</span>
+                    <button 
+                        type="button"
+                        class="remove-btn px-2 text-slate-400 hover:text-red-500 font-bold ml-2"
+                        aria-label="Remove folder"
+                    >×</button>
+                `;
+
+                // Handle folder switching
+                div.addEventListener('click', (e) => {
+                    // Only switch if we didn't click the remove button
+                    if (!e.target.classList.contains('remove-btn')) {
+                        switchFolder(path);
+                    }
+                });
+
+                // Handle folder removal
+                const btn = div.querySelector('.remove-btn');
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Stop the 'switchFolder' from firing
+                    removeFolder(path);
+                });
+
+                list.appendChild(div);
+            });
+        }
+
+        function removeFolder(path) {
+            // 1. Remove from the state Map
+            folders.delete(path);
+            
+            // 2. If the folder we deleted was the one we were looking at, clear the main pane
+            if (activePath === path) {
+                activePath = null;
+                const rootNode = document.getElementById('rootNode');
+                if (rootNode) rootNode.innerHTML = '';
+                
+                document.getElementById('treeContainer').classList.add('hidden');
+                document.getElementById('treeHeader').classList.add('hidden');
+                document.getElementById('controls').classList.add('hidden');
+                document.getElementById('emptyState').classList.remove('hidden');
+                document.getElementById('currentFolderName').textContent = 'No folder selected';
+            }
+            
+            // 3. Force the sidebar to redraw
+            updateSidebar();
+        }
+
+        function switchFolder(path) {
+            activePath = path;
+            const data = folders.get(path);
+            document.getElementById('currentFolderName').textContent = data.name;
+            document.getElementById('treeContainer').classList.remove('hidden');
+            document.getElementById('treeHeader').classList.remove('hidden');
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            
+            const rootNode = document.getElementById('rootNode');
+            rootNode.innerHTML = '';
+            createNodeEl(data.rootId, rootNode, 0, data.nodeMap);
+            updateSidebar();
+        }
+
+        function createNodeEl(id, container, depth, nodeMap) {
+            const node = nodeMap.get(id);
+            if (!node) return;
+
+            const row = document.createElement('div');
+            row.className = `file-row py-1 px-4`;
+            
+            const name = document.createElement('div');
+            name.className = "flex items-center gap-2 truncate";
+            name.style.paddingLeft = `${depth * 1}rem`;
+            
+            const chevron = node.is_dir ? `<span class="chevron">▶</span>` : `<span class="w-4"></span>`;
+            name.innerHTML = `${chevron} ${node.is_dir ? '📁' : '📄'} <span class="truncate">${node.name}</span>`;
+
+            const size = document.createElement('div'); size.className="text-right mono text-slate-400 pr-2"; size.textContent = formatSize(node.size);
+            const type = document.createElement('div'); type.className="text-right mono text-slate-400 truncate"; type.textContent = node.file_type;
+            const date = document.createElement('div'); date.className="text-right mono text-slate-400 pr-4"; date.textContent = formatDate(node.last_modified);
+
+            row.append(name, size, type, date);
+            container.append(row);
+
+            if (node.is_dir) {
+                const content = document.createElement('div');
+                content.className = "folder-content";
+                container.append(content);
+                row.onclick = () => {
+                    const isOpen = content.classList.toggle('open');
+                    row.querySelector('.chevron')?.classList.toggle('rotated', isOpen);
+                    if (isOpen && !content.innerHTML) {
+                        node.children.forEach(cid => createNodeEl(cid, content, depth + 1, nodeMap));
+                    }
+                };
+            }
+        }
+
+        function expandAll() {
+            const closed = Array.from(document.querySelectorAll('.file-row')).filter(r => r.nextElementSibling?.classList.contains('folder-content') && !r.nextElementSibling.classList.contains('open'));
+            if (closed.length === 0) return;
+            closed.forEach(r => r.click());
+            requestAnimationFrame(expandAll);
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.folder-content').forEach(c => c.classList.remove('open'));
+            document.querySelectorAll('.chevron').forEach(ch => ch.classList.remove('rotated'));
+        }
+
+        function formatSize(b) { if(b===0) return '0 B'; const k=1024, s=['B','KB','MB','GB'], i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(1)) + ' ' + s[i]; }
+        function formatDate(ts) { return new Date(ts).toISOString().replace('T',' ').substring(0,16); }
+    </script>
+</body>
+</html>
