@@ -3,7 +3,7 @@
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::fs;
-use std::process::Command; // Required for explorer
+use std::process::Command;
 use std::time::UNIX_EPOCH;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -41,10 +41,7 @@ fn get_recent_files(path: String, limit: usize) -> Result<Vec<FileNode>, String>
 fn reveal_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer")
-            .args(["/select,", &path]) // Highlight the specific item
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        Command::new("explorer").args(["/select,", &path]).spawn().map_err(|e| e.to_string())?;
         Ok(())
     }
     #[cfg(not(target_os = "windows"))]
@@ -82,7 +79,13 @@ fn scan_recursive(path: &std::path::Path, map: &mut HashMap<String, FileNode>) -
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![scan_directory, get_recent_files, reveal_in_explorer])
+        .plugin(tauri_plugin_dialog::init()) // REQUIRED for save/open dialogs
+        .plugin(tauri_plugin_fs::init())     // REQUIRED for workspace JSON files
+        .invoke_handler(tauri::generate_handler![
+            scan_directory, 
+            get_recent_files, 
+            reveal_in_explorer
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
